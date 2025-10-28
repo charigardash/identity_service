@@ -1,0 +1,46 @@
+services:
+  springboot-app:
+    build: .
+    ports:
+      - "8081:8080"
+    depends_on:
+      - postgres
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/mydb
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: password
+      APP_JWT_SECRET : mySuperSecretJWTSigningKeyThatIsAtLeast32BytesLong!
+      APP_JWT_EXPIRATION_MS : 86400000
+
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    restart: always
+    ports:
+      - 5432:5432
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: mydb
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+volumes:
+  pgdata:
+    driver: local
+
+#
+#postgres:
+#  image: postgres:15.3
+#  environment:
+#    POSTGRES_USER: myuser
+#    POSTGRES_PASSWORD: secret
+#    POSTGRES_DB: mydb
+#  ports:
+#    - "5432:5432"
+#  volumes:
+#    - pgdata:/var/lib/postgresql/data
+#
+#volumes:
+#  pgdata:
+#    driver: local
+
