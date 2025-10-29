@@ -1,16 +1,20 @@
 package com.learning.service.identity.serviceImp;
 
 import com.learning.customException.SignupExceptions;
+import com.learning.customException.UserNotFoundException;
+import com.learning.dbentity.identity.RefreshToken;
 import com.learning.dbentity.identity.Role;
 import com.learning.dbentity.identity.User;
 import com.learning.repository.identity.RoleRepository;
 import com.learning.repository.identity.UserRepository;
 import com.learning.requestDTO.LoginRequest;
 import com.learning.requestDTO.SignupRequest;
+import com.learning.requestDTO.TokenRefreshRequest;
 import com.learning.responseDTO.JwtResponse;
 import com.learning.security.JwtUtils;
 import com.learning.security.UserPrincipal;
 import com.learning.service.identity.AuthService;
+import com.learning.service.identity.RefreshTokenService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -48,23 +52,62 @@ public class AuthServiceImpl implements AuthService {
     @Autowired
     private JwtUtils jwtUtils;
 
+    @Autowired
+    private RefreshTokenService refreshTokenService;
+
     @Override
     public JwtResponse authenticateUser(LoginRequest loginRequest) {
         Authentication authentication = authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(loginRequest.getUserName(), loginRequest.getPassword()));
         SecurityContextHolder.getContext().setAuthentication(authentication);
         String jwtToken = jwtUtils.generateJwtToken(authentication);
         UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
+        RefreshToken refreshToken = refreshTokenService.createRefreshToken(userPrincipal.getId());
         Set<String> roles = userPrincipal.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .collect(Collectors.toSet());
         return JwtResponse.builder()
                 .token(jwtToken)
+                .refreshToken(refreshToken.getToken())
                 .id(userPrincipal.getId())
                 .userName(userPrincipal.getUsername())
                 .email(userPrincipal.getEmail())
                 .roles(roles)
                 .type("Bearer")
                 .build();
+    }
+
+    @Override
+    public JwtResponse refreshJwtToken(TokenRefreshRequest refreshRequest) {
+        String refreshToken = refreshRequest.getRefreshToken();
+        RefreshToken token = refreshTokenService.findToken(refreshToken);
+        token = refreshTokenService.verifyExpiration(token);
+        User userPrincipal = token.getUser();
+        String jwtToken = jwtUtils.generateJwtTokenFromUser(userPrincipal);
+        Set<String> roles = userPrincipal.getRoles().stream()
+                .map(role -> role.getName().name())
+                .collect(Collectors.toSet());
+        return JwtResponse.builder()
+                .token(jwtToken)
+                .refreshToken(token.getToken())
+                .id(userPrincipal.getId())
+                .userName(userPrincipal.getUserName())
+                .email(userPrincipal.getEmail())
+                .roles(roles)
+                .type("Bearer")
+                .build();
+    }
+
+    @Override
+    @Transactional
+    public void logoutUser(TokenRefreshRequest refreshRequest) {
+        refreshTokenService.deleteByToken(refreshRequest.getRefreshToken());
+    }
+
+    @Override
+    @Transactional
+    public void logoutAllUser(Long userId) {
+        User user = userRepository.findById(userId).orElseThrow(() -> new UserNotFoundException(userId.toString()));
+        refreshTokenService.revokeAllUserTokens(user);
     }
 
 

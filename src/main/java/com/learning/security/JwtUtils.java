@@ -1,5 +1,6 @@
 package com.learning.security;
 
+import com.learning.dbentity.identity.User;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 import jakarta.annotation.PostConstruct;
@@ -36,6 +37,15 @@ public class JwtUtils {
         UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
         return Jwts.builder()
                 .setSubject(userPrincipal.getUsername())
+                .setIssuedAt(new Date())
+                .setExpiration(new Date(new Date().getTime()+jwtExpirationMs))
+                .signWith(getSigningKey(), SignatureAlgorithm.HS256)
+                .compact();
+    }
+
+    public String generateJwtTokenFromUser(User user){
+        return Jwts.builder()
+                .setSubject(user.getUserName())
                 .setIssuedAt(new Date())
                 .setExpiration(new Date(new Date().getTime()+jwtExpirationMs))
                 .signWith(getSigningKey(), SignatureAlgorithm.HS256)

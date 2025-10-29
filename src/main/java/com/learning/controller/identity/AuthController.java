@@ -3,6 +3,7 @@ package com.learning.controller.identity;
 import com.learning.dbentity.identity.User;
 import com.learning.requestDTO.LoginRequest;
 import com.learning.requestDTO.SignupRequest;
+import com.learning.requestDTO.TokenRefreshRequest;
 import com.learning.responseDTO.JwtResponse;
 import com.learning.service.identity.AuthService;
 import jakarta.validation.Valid;
@@ -37,5 +38,23 @@ public class AuthController {
     public ResponseEntity<?> fetchAllRegisterUser(){
         List<User> allRegisterUser = authService.getAllRegisterUser();
         return ResponseEntity.ok(allRegisterUser);
+    }
+
+    @PostMapping("/refreshToken")
+    public ResponseEntity<?> refreshToken(@Valid @RequestBody TokenRefreshRequest request){
+        JwtResponse jwtResponse = authService.refreshJwtToken(request);
+        return ResponseEntity.ok(jwtResponse);
+    }
+
+    @PostMapping("/logout")
+    public ResponseEntity<?> logoutUser(@Valid @RequestBody TokenRefreshRequest refreshRequest){
+        authService.logoutUser(refreshRequest);
+        return ResponseEntity.ok("Log out successful!");
+    }
+
+    @PostMapping("/logout-all")
+    public ResponseEntity<?> logoutAllFromAllDevices(@RequestParam Long userId){
+        authService.logoutAllUser(userId);
+        return ResponseEntity.ok("Logged out from all devices!");
     }
 }
