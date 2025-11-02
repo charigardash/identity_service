@@ -1,20 +1,26 @@
 package com.learning.service.identity.serviceImp;
 
+import com.learning.customException.IdentityAppExcpetion;
 import com.learning.customException.SignupExceptions;
 import com.learning.customException.UserNotFoundException;
 import com.learning.dbentity.identity.RefreshToken;
 import com.learning.dbentity.identity.Role;
 import com.learning.dbentity.identity.User;
+import com.learning.dbentity.identity.User2FA;
 import com.learning.repository.identity.RoleRepository;
+import com.learning.repository.identity.User2FARepository;
 import com.learning.repository.identity.UserRepository;
 import com.learning.requestDTO.LoginRequest;
 import com.learning.requestDTO.SignupRequest;
 import com.learning.requestDTO.TokenRefreshRequest;
+import com.learning.requestDTO.TwoFactorRequest;
 import com.learning.responseDTO.JwtResponse;
+import com.learning.responseDTO.TwoFactorResponse;
 import com.learning.security.JwtUtils;
 import com.learning.security.UserPrincipal;
 import com.learning.service.identity.AuthService;
 import com.learning.service.identity.RefreshTokenService;
+import com.learning.service.identity.TwoFactorAuthService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -26,6 +32,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -55,16 +62,64 @@ public class AuthServiceImpl implements AuthService {
     @Autowired
     private RefreshTokenService refreshTokenService;
 
+    @Autowired
+    private TwoFactorAuthService twoFactorAuthService;
+
+    @Autowired
+    private User2FARepository user2FARepository;
+
     @Override
-    public JwtResponse authenticateUser(LoginRequest loginRequest) {
+    public Object authenticateUser(LoginRequest loginRequest, String deviceId) {
         Authentication authentication = authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(loginRequest.getUserName(), loginRequest.getPassword()));
         SecurityContextHolder.getContext().setAuthentication(authentication);
-        String jwtToken = jwtUtils.generateJwtToken(authentication);
         UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
+        User user = userRepository.findById(userPrincipal.getId()).orElseThrow(() -> new UserNotFoundException(userPrincipal.getId()));
+
+        //check if 2FA enabled for this user
+        boolean is2FAEnabled = user2FARepository.findByUser(user).map(User2FA::getEnabled).orElse(false);
+        boolean isDeviceTrusted = twoFactorAuthService.isDeviceTrusted(user.getId(), deviceId);
+        if(is2FAEnabled && !isDeviceTrusted){
+            // Generate and send OTP
+            String otp = twoFactorAuthService.generateLoginOtp(user.getId(), deviceId);
+            // Generate temporary token for 2FA verification
+            String tempToken = jwtUtils.generateJwtToken(authentication);
+            return new TwoFactorResponse(true, "Two-factor authentication required. OTP sent to your email.",
+                    tempToken, user.getId());
+        }else {
+            // No 2FA required, proceed with normal login
+            return generateJwtResponse(authentication, userPrincipal);
+        }
+    }
+
+    /**
+     * Verify 2FA and complete login
+     * @param usedId
+     * @param twoFactorRequest
+     * @return
+     */
+    @Override
+    public JwtResponse verifyTwoFactor(Long usedId, TwoFactorRequest twoFactorRequest){
+        User user = userRepository.findById(usedId).orElseThrow(() -> new UserNotFoundException(usedId));
+        boolean isValid = false;
+        if(twoFactorAuthService.verifyLoginAttempt(usedId, twoFactorRequest.getCode(), twoFactorRequest.getDeviceId())){
+            isValid = true;
+        }
+        else if(twoFactorAuthService.isDeviceTrusted(usedId, twoFactorRequest.getDeviceId())){
+            isValid = true;
+        }
+        if(!isValid){
+            throw new IdentityAppExcpetion("Invalid verification code", HttpStatus.FORBIDDEN);
+        }
+        Authentication authentication = new UsernamePasswordAuthenticationToken(user.getUserName(), null, Collections.emptyList());
+        return generateJwtResponse(authentication, UserPrincipal.build(user));
+    }
+
+    private JwtResponse generateJwtResponse(Authentication authentication, UserPrincipal userPrincipal){
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(userPrincipal.getId());
         Set<String> roles = userPrincipal.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .collect(Collectors.toSet());
+        String jwtToken = jwtUtils.generateJwtToken(authentication);
         return JwtResponse.builder()
                 .token(jwtToken)
                 .refreshToken(refreshToken.getToken())

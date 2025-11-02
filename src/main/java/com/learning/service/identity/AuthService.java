@@ -4,6 +4,7 @@ import com.learning.dbentity.identity.User;
 import com.learning.requestDTO.LoginRequest;
 import com.learning.requestDTO.SignupRequest;
 import com.learning.requestDTO.TokenRefreshRequest;
+import com.learning.requestDTO.TwoFactorRequest;
 import com.learning.responseDTO.JwtResponse;
 import org.springframework.stereotype.Service;
 
@@ -15,7 +16,9 @@ public interface AuthService {
 
     List<User> getAllRegisterUser();
 
-    JwtResponse authenticateUser(LoginRequest loginRequest);
+    Object authenticateUser(LoginRequest loginRequest, String deviceId);
+
+    JwtResponse verifyTwoFactor(Long usedId, TwoFactorRequest twoFactorRequest);
 
     JwtResponse refreshJwtToken(TokenRefreshRequest refreshRequest);
 

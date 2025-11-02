@@ -24,6 +24,9 @@ public class JwtUtils {
     @Value("${app.jwt.expiration.ms}")
     private int jwtExpirationMs;
 
+    @Value("${app.jwt.temp-expiration-ms:300000}") // default 5 minutes
+    private int jwtTempExpirationMs;
+
     private Key getSigningKey(){
         return Keys.hmacShaKeyFor(jwtSecret.getBytes());
     }
@@ -33,12 +36,13 @@ public class JwtUtils {
         logger.info("JWT Secret: {}", jwtSecret);
     }
 
-    public String generateJwtToken(Authentication authentication){
+    public String generateJwtToken(Authentication authentication,  Boolean... tem2fa){
         UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
+        int jwtExpiryMs = tem2fa.length > 0 ? jwtTempExpirationMs : jwtExpirationMs;
         return Jwts.builder()
                 .setSubject(userPrincipal.getUsername())
                 .setIssuedAt(new Date())
-                .setExpiration(new Date(new Date().getTime()+jwtExpirationMs))
+                .setExpiration(new Date(new Date().getTime()+jwtExpiryMs))
                 .signWith(getSigningKey(), SignatureAlgorithm.HS256)
                 .compact();
     }
