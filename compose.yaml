@@ -11,6 +11,7 @@ services:
       SPRING_DATASOURCE_PASSWORD: password
       APP_JWT_SECRET : mySuperSecretJWTSigningKeyThatIsAtLeast32BytesLong!
       APP_JWT_EXPIRATION_MS : 86400000
+      APP_JWT_REFRESHTOKEN_EXPIRATION : 604800
 
   postgres:
     image: postgres:16

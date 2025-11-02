@@ -10,6 +10,7 @@ import java.util.Set;
 @Builder
 public class JwtResponse {
     private String token;
+    private String refreshToken;
     private String type;
     private Long id;
     private String userName;
