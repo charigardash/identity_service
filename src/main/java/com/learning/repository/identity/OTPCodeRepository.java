@@ -14,22 +14,21 @@ import java.util.Optional;
 
 @Repository
 public interface OTPCodeRepository extends JpaRepository<OTPCode, Long> {
+
     Optional<OTPCode> findByCodeAndTypeAndUsedFalse(String code, OtpTypeEnum type);
-    List<OTPCode> findByUserAndTypeUsedFalse(User user, String type);
 
     @Modifying
-    @Query("DELETE FROM otp_codes O WHERE O.expiresAt < :now")
+    @Query("DELETE FROM OTPCode O WHERE O.expiresAt < :now")
     void deleteAllExpired(Instant now);
 
     @Modifying
-    @Query("UPDATE otp_codes O SET O.used = true where o.user =:user and o.type = :type")
+    @Query("UPDATE OTPCode o SET o.used = true where o.user =:user and o.type = :type")
     void markAllAsUsed(User user, OtpTypeEnum type);
 
-    @Modifying
-    @Query("SELECT COUNT(o) FROM otp_codes o WHERE o.user = :user AND o.createdAt > :since")
+    @Query("SELECT COUNT(o) FROM OTPCode o WHERE o.user = :user AND o.createdAt > :since")
     long countRecentAttempts(User user, Instant since);
 
     @Modifying
-    @Query("DELETE FROM otp_code o where o.expiresAt < CURRENT_TIMESTAMP")
+    @Query("DELETE FROM OTPCode o where o.expiresAt < CURRENT_TIMESTAMP")
     void deleteAllUsedOtp();
 }
