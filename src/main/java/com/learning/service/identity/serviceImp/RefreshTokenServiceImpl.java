@@ -22,7 +22,7 @@ import static org.springframework.http.HttpStatus.NOT_FOUND;
 @Service
 public class RefreshTokenServiceImpl implements RefreshTokenService {
 
-    @Value("${app.jwt.refresh-expiration-ms}")
+    @Value("${app.jwt.refresh-expiration-ms:3600}")
     private Long refreshTokenDurationMs;
 
     @Autowired

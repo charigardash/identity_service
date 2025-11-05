@@ -7,8 +7,12 @@ import java.time.Instant;
 
 @Service
 public interface OTPService {
-    public String generateOTP();
-    public Instant getExpiryTime();
+    @Transactional
+    String generateLoginOtp(Long userId, String deviceId);
+
+    @Transactional
+    boolean verifyLoginAttempt(Long userId, String otp);
+
     public boolean isValidFormat(String otp);
 
     @Transactional

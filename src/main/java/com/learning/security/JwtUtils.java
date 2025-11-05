@@ -36,8 +36,7 @@ public class JwtUtils {
         logger.info("JWT Secret: {}", jwtSecret);
     }
 
-    public String generateJwtToken(Authentication authentication,  Boolean... tem2fa){
-        UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
+    public String generateJwtToken(UserPrincipal userPrincipal,  Boolean... tem2fa){
         int jwtExpiryMs = tem2fa.length > 0 ? jwtTempExpirationMs : jwtExpirationMs;
         return Jwts.builder()
                 .setSubject(userPrincipal.getUsername())

@@ -7,6 +7,7 @@ import com.learning.requestDTO.TokenRefreshRequest;
 import com.learning.requestDTO.TwoFactorRequest;
 import com.learning.responseDTO.JwtResponse;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -18,6 +19,7 @@ public interface AuthService {
 
     Object authenticateUser(LoginRequest loginRequest, String deviceId);
 
+    @Transactional
     JwtResponse verifyTwoFactor(Long usedId, TwoFactorRequest twoFactorRequest);
 
     JwtResponse refreshJwtToken(TokenRefreshRequest refreshRequest);

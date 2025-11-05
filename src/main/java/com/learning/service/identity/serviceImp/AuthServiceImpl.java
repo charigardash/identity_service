@@ -7,6 +7,7 @@ import com.learning.dbentity.identity.RefreshToken;
 import com.learning.dbentity.identity.Role;
 import com.learning.dbentity.identity.User;
 import com.learning.dbentity.identity.User2FA;
+import com.learning.enums.TwoFAMethodEnum;
 import com.learning.repository.identity.RoleRepository;
 import com.learning.repository.identity.User2FARepository;
 import com.learning.repository.identity.UserRepository;
@@ -80,11 +81,11 @@ public class AuthServiceImpl implements AuthService {
         boolean isDeviceTrusted = twoFactorAuthService.isDeviceTrusted(user.getId(), deviceId);
         if(is2FAEnabled && !isDeviceTrusted){
             // Generate and send OTP
-            String otp = twoFactorAuthService.generateLoginOtp(user.getId(), deviceId);
+            String message = twoFactorAuthService.authenticateUser2FA(user.getId(), deviceId, loginRequest.getMethod());
             // Generate temporary token for 2FA verification
-            String tempToken = jwtUtils.generateJwtToken(authentication);
-            return new TwoFactorResponse(true, "Two-factor authentication required. OTP sent to your email.",
-                    tempToken, user.getId());
+            String tempToken = jwtUtils.generateJwtToken(userPrincipal);
+            return new TwoFactorResponse(true, "Two-factor authentication required. "+message,
+                    tempToken, user.getId(), null);
         }else {
             // No 2FA required, proceed with normal login
             return generateJwtResponse(authentication, userPrincipal);
@@ -98,20 +99,26 @@ public class AuthServiceImpl implements AuthService {
      * @return
      */
     @Override
+    @Transactional
     public JwtResponse verifyTwoFactor(Long usedId, TwoFactorRequest twoFactorRequest){
         User user = userRepository.findById(usedId).orElseThrow(() -> new UserNotFoundException(usedId));
-        boolean isValid = false;
-        if(twoFactorAuthService.verifyLoginAttempt(usedId, twoFactorRequest.getCode(), twoFactorRequest.getDeviceId())){
-            isValid = true;
+        TwoFAMethodEnum twoFactorRequestMethod = twoFactorRequest.getMethod();
+        if(twoFactorRequestMethod == null){
+            twoFactorRequestMethod = autoDetect2FAMethod(twoFactorRequest.getCode());
         }
-        else if(twoFactorAuthService.isDeviceTrusted(usedId, twoFactorRequest.getDeviceId())){
-            isValid = true;
-        }
+        boolean isValid = twoFactorAuthService.verify2FACode(usedId, twoFactorRequest.getCode(), twoFactorRequestMethod, twoFactorRequest);
+//        if(twoFactorAuthService.verifyLoginAttempt(usedId, twoFactorRequest.getCode(), twoFactorRequest.getDeviceId())){
+//            isValid = true;
+//        }
+//        else if(twoFactorAuthService.isDeviceTrusted(usedId, twoFactorRequest.getDeviceId())){
+//            isValid = true;
+//        }
         if(!isValid){
             throw new IdentityAppExcpetion("Invalid verification code", HttpStatus.FORBIDDEN);
         }
-        Authentication authentication = new UsernamePasswordAuthenticationToken(user.getUserName(), null, Collections.emptyList());
-        return generateJwtResponse(authentication, UserPrincipal.build(user));
+        UserPrincipal userPrincipal = UserPrincipal.build(user);
+        Authentication authentication = new UsernamePasswordAuthenticationToken(user.getUserName(), null, userPrincipal.getAuthorities());
+        return generateJwtResponse(authentication, userPrincipal);
     }
 
     private JwtResponse generateJwtResponse(Authentication authentication, UserPrincipal userPrincipal){
@@ -119,7 +126,7 @@ public class AuthServiceImpl implements AuthService {
         Set<String> roles = userPrincipal.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
                 .collect(Collectors.toSet());
-        String jwtToken = jwtUtils.generateJwtToken(authentication);
+        String jwtToken = jwtUtils.generateJwtToken(userPrincipal);
         return JwtResponse.builder()
                 .token(jwtToken)
                 .refreshToken(refreshToken.getToken())
@@ -129,6 +136,18 @@ public class AuthServiceImpl implements AuthService {
                 .roles(roles)
                 .type("Bearer")
                 .build();
+    }
+
+    private TwoFAMethodEnum autoDetect2FAMethod(String code){
+        // TOTP codes are exactly 6 digits
+        if(code.length() == 6 && code.chars().allMatch(Character::isDigit))return TwoFAMethodEnum.TOTP;
+
+        // Email OTP codes are exactly 6 digits (same format, but we'll try email first)
+        if(code.length() == 6 && code.chars().allMatch(Character::isDigit))return TwoFAMethodEnum.OTP;
+
+        if(code.length() == 8 && code.chars().allMatch(Character::isDigit))return TwoFAMethodEnum.BACKUP;
+
+        throw new IdentityAppExcpetion("Unable to determine 2FA method from code format", HttpStatus.BAD_REQUEST);
     }
 
     @Override

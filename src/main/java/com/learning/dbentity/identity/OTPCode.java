@@ -22,7 +22,7 @@ public class OTPCode {
     private String code;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @Column(length = 20)
     private OtpTypeEnum type;
 
     @Column(nullable = false)

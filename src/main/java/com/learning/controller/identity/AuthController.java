@@ -8,7 +8,9 @@ import com.learning.requestDTO.TwoFactorRequest;
 import com.learning.responseDTO.JwtResponse;
 import com.learning.responseDTO.TwoFactorResponse;
 import com.learning.service.identity.AuthService;
+import com.learning.service.identity.TwoFactorAuthService;
 import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,11 +20,18 @@ import java.util.List;
 @RequestMapping("/api/auth")
 @CrossOrigin(origins = "*", maxAge = 3600)
 public class AuthController {
-    private final AuthService authService;
 
-    AuthController(AuthService authService){
-        this.authService = authService;
-    }
+    @Autowired
+    private AuthService authService;
+
+    @Autowired
+    private TwoFactorAuthService twoFactorAuthService;
+
+//    @Autowired
+//    public AuthController(AuthService authService, TwoFactorAuthService twoFactorAuthService){
+//        this.authService = authService;
+//        this.twoFactorAuthService = twoFactorAuthService;
+//    }
 
     @PostMapping("/signup")
     public ResponseEntity<?> signUpRequest(@Valid @RequestBody SignupRequest signupRequest){
@@ -36,8 +45,9 @@ public class AuthController {
         Object response = authService.authenticateUser(loginRequest, deviceId);
         if(response instanceof JwtResponse){
             return ResponseEntity.ok((response));
-        }else if(response instanceof TwoFactorResponse){
-            return ResponseEntity.ok(response);
+        }else if(response instanceof TwoFactorResponse twoFactorResponse){
+            twoFactorResponse.setAvailableMethods(twoFactorAuthService.getAvailable2FAMethods(twoFactorResponse.getUserId()));
+            return ResponseEntity.ok(twoFactorResponse);
         }else {
             return ResponseEntity.badRequest().body("Unexpected response type");
         }
