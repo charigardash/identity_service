@@ -53,9 +53,15 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth ->
                         auth.requestMatchers("/api/auth/**").permitAll()
                                 .requestMatchers("/api/test/**").permitAll()
-                                .requestMatchers("/api/admin/**").hasRole("ADMIN")
-                                .requestMatchers("/api/moderator/**").hasAnyRole("MODERATOR", "ADMIN")
-                                .requestMatchers("/api/user/**").hasAnyRole("USER", "MODERATOR", "ADMIN")
+                                .requestMatchers("/actuator/health").permitAll()  // Allow health checks
+                                .requestMatchers("/actuator/info").permitAll()    // Allow info endpoint
+                                .requestMatchers("/actuator/metrics").hasRole("ADMIN")     // Secure metrics
+                                .requestMatchers("/actuator/prometheus").hasRole("ADMIN")  // Secure prometheus
+                                .requestMatchers("/identity/health/**").hasRole("ADMIN")        // Secure custom health
+                                .requestMatchers("/identity/metrics/**").hasRole("ADMIN")       // Secure custom metrics
+                                .requestMatchers("/identity/admin/**").hasRole("ADMIN")
+                                .requestMatchers("/identity/moderator/**").hasAnyRole("MODERATOR", "ADMIN")
+                                .requestMatchers("/identity/user/**").hasAnyRole("USER", "MODERATOR", "ADMIN")
                                 .anyRequest()
                                 .authenticated());
         http.authenticationProvider(authenticationProvider());
