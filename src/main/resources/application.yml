@@ -1,0 +1,8 @@
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "prometheus" # You can also use '*' to include all actuator endpoints
+  endpoint:
+    prometheus:
+      enabled: true

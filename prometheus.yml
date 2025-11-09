@@ -1,0 +1,16 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'spring-security-app'
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 10s
+    static_configs:
+      - targets: ['springboot-app:8080']
+    basic_auth:
+      username: 'admin'
+      password: 'admin'
+
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres:5432']

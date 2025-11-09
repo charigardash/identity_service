@@ -8,6 +8,7 @@ import com.learning.dbentity.identity.Role;
 import com.learning.dbentity.identity.User;
 import com.learning.dbentity.identity.User2FA;
 import com.learning.enums.TwoFAMethodEnum;
+import com.learning.health.SecurityMetricsService;
 import com.learning.repository.identity.RoleRepository;
 import com.learning.repository.identity.User2FARepository;
 import com.learning.repository.identity.UserRepository;
@@ -22,6 +23,7 @@ import com.learning.security.UserPrincipal;
 import com.learning.service.identity.AuthService;
 import com.learning.service.identity.RefreshTokenService;
 import com.learning.service.identity.TwoFactorAuthService;
+import io.micrometer.core.instrument.Timer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -69,26 +71,40 @@ public class AuthServiceImpl implements AuthService {
     @Autowired
     private User2FARepository user2FARepository;
 
+    @Autowired
+    private SecurityMetricsService securityMetricsService;
+
     @Override
     public Object authenticateUser(LoginRequest loginRequest, String deviceId) {
-        Authentication authentication = authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(loginRequest.getUserName(), loginRequest.getPassword()));
-        SecurityContextHolder.getContext().setAuthentication(authentication);
-        UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
-        User user = userRepository.findById(userPrincipal.getId()).orElseThrow(() -> new UserNotFoundException(userPrincipal.getId()));
+        boolean success = false;
+        Timer.Sample timer = securityMetricsService.startAuthenticationTimer();
+        try {
+            Authentication authentication = authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(loginRequest.getUserName(), loginRequest.getPassword()));
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+            UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
+            User user = userRepository.findById(userPrincipal.getId()).orElseThrow(() -> new UserNotFoundException(userPrincipal.getId()));
 
-        //check if 2FA enabled for this user
-        boolean is2FAEnabled = user2FARepository.findByUser(user).map(User2FA::getEnabled).orElse(false);
-        boolean isDeviceTrusted = twoFactorAuthService.isDeviceTrusted(user.getId(), deviceId);
-        if(is2FAEnabled && !isDeviceTrusted){
-            // Generate and send OTP
-            String message = twoFactorAuthService.authenticateUser2FA(user.getId(), deviceId, loginRequest.getMethod());
-            // Generate temporary token for 2FA verification
-            String tempToken = jwtUtils.generateJwtToken(userPrincipal);
-            return new TwoFactorResponse(true, "Two-factor authentication required. "+message,
-                    tempToken, user.getId(), null);
-        }else {
-            // No 2FA required, proceed with normal login
-            return generateJwtResponse(authentication, userPrincipal);
+            //check if 2FA enabled for this user
+            boolean is2FAEnabled = user2FARepository.findByUser(user).map(User2FA::getEnabled).orElse(false);
+            boolean isDeviceTrusted = twoFactorAuthService.isDeviceTrusted(user.getId(), deviceId);
+            if (is2FAEnabled && !isDeviceTrusted) {
+                // Generate and send OTP
+                String message = twoFactorAuthService.authenticateUser2FA(user.getId(), deviceId, loginRequest.getMethod());
+                // Generate temporary token for 2FA verification
+                String tempToken = jwtUtils.generateJwtToken(userPrincipal);
+                success = true;
+                return new TwoFactorResponse(true, "Two-factor authentication required. " + message,
+                        tempToken, user.getId(), null);
+            } else {
+                // No 2FA required, proceed with normal login
+                JwtResponse jwtResponse = generateJwtResponse(authentication, userPrincipal);
+                success = true;
+                return jwtResponse;
+            }
+        }finally {
+            securityMetricsService.stopAuthenticationTimer(timer);
+            securityMetricsService.recordLoginAttempt(success);
+
         }
     }
 
@@ -101,24 +117,33 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public JwtResponse verifyTwoFactor(Long usedId, TwoFactorRequest twoFactorRequest){
-        User user = userRepository.findById(usedId).orElseThrow(() -> new UserNotFoundException(usedId));
-        TwoFAMethodEnum twoFactorRequestMethod = twoFactorRequest.getMethod();
-        if(twoFactorRequestMethod == null){
-            twoFactorRequestMethod = autoDetect2FAMethod(twoFactorRequest.getCode());
-        }
-        boolean isValid = twoFactorAuthService.verify2FACode(usedId, twoFactorRequest.getCode(), twoFactorRequestMethod, twoFactorRequest);
+        Timer.Sample timer = securityMetricsService.startTwoFactorVerificationTimer();
+        boolean success = false;
+        try {
+            User user = userRepository.findById(usedId).orElseThrow(() -> new UserNotFoundException(usedId));
+            TwoFAMethodEnum twoFactorRequestMethod = twoFactorRequest.getMethod();
+            if (twoFactorRequestMethod == null) {
+                twoFactorRequestMethod = autoDetect2FAMethod(twoFactorRequest.getCode());
+            }
+            boolean isValid = twoFactorAuthService.verify2FACode(usedId, twoFactorRequest.getCode(), twoFactorRequestMethod, twoFactorRequest);
 //        if(twoFactorAuthService.verifyLoginAttempt(usedId, twoFactorRequest.getCode(), twoFactorRequest.getDeviceId())){
 //            isValid = true;
 //        }
 //        else if(twoFactorAuthService.isDeviceTrusted(usedId, twoFactorRequest.getDeviceId())){
 //            isValid = true;
 //        }
-        if(!isValid){
-            throw new IdentityAppExcpetion("Invalid verification code", HttpStatus.FORBIDDEN);
+            if (!isValid) {
+                throw new IdentityAppExcpetion("Invalid verification code", HttpStatus.FORBIDDEN);
+            }
+            UserPrincipal userPrincipal = UserPrincipal.build(user);
+            Authentication authentication = new UsernamePasswordAuthenticationToken(user.getUserName(), null, userPrincipal.getAuthorities());
+            JwtResponse jwtResponse = generateJwtResponse(authentication, userPrincipal);
+            success = true;
+            return jwtResponse;
+        }finally {
+            securityMetricsService.stopTwoFactorVerificationTimer(timer);
+            securityMetricsService.recordTwoFactorAttempt(success);
         }
-        UserPrincipal userPrincipal = UserPrincipal.build(user);
-        Authentication authentication = new UsernamePasswordAuthenticationToken(user.getUserName(), null, userPrincipal.getAuthorities());
-        return generateJwtResponse(authentication, userPrincipal);
     }
 
     private JwtResponse generateJwtResponse(Authentication authentication, UserPrincipal userPrincipal){
@@ -152,23 +177,30 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public JwtResponse refreshJwtToken(TokenRefreshRequest refreshRequest) {
-        String refreshToken = refreshRequest.getRefreshToken();
-        RefreshToken token = refreshTokenService.findToken(refreshToken);
-        token = refreshTokenService.verifyExpiration(token);
-        User userPrincipal = token.getUser();
-        String jwtToken = jwtUtils.generateJwtTokenFromUser(userPrincipal);
-        Set<String> roles = userPrincipal.getRoles().stream()
-                .map(role -> role.getName().name())
-                .collect(Collectors.toSet());
-        return JwtResponse.builder()
-                .token(jwtToken)
-                .refreshToken(token.getToken())
-                .id(userPrincipal.getId())
-                .userName(userPrincipal.getUserName())
-                .email(userPrincipal.getEmail())
-                .roles(roles)
-                .type("Bearer")
-                .build();
+        boolean success = false;
+        try {
+            String refreshToken = refreshRequest.getRefreshToken();
+            RefreshToken token = refreshTokenService.findToken(refreshToken);
+            token = refreshTokenService.verifyExpiration(token);
+            User userPrincipal = token.getUser();
+            String jwtToken = jwtUtils.generateJwtTokenFromUser(userPrincipal);
+            Set<String> roles = userPrincipal.getRoles().stream()
+                    .map(role -> role.getName().name())
+                    .collect(Collectors.toSet());
+            JwtResponse jwtResponse = JwtResponse.builder()
+                    .token(jwtToken)
+                    .refreshToken(token.getToken())
+                    .id(userPrincipal.getId())
+                    .userName(userPrincipal.getUserName())
+                    .email(userPrincipal.getEmail())
+                    .roles(roles)
+                    .type("Bearer")
+                    .build();
+            success = true;
+            return jwtResponse;
+        }finally {
+            securityMetricsService.recordTokenRefresh(success);
+        }
     }
 
     @Override
@@ -198,6 +230,7 @@ public class AuthServiceImpl implements AuthService {
         Set<Role> roles = getRoles(signupRequest.getRoles());
         user.setRoles(roles);
         userRepository.save(user);
+        securityMetricsService.recordUserRegistration();
         return "User registered successfully!";
     }
 
