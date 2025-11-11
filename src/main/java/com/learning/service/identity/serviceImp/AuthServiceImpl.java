@@ -7,6 +7,7 @@ import com.learning.dbentity.identity.RefreshToken;
 import com.learning.dbentity.identity.Role;
 import com.learning.dbentity.identity.User;
 import com.learning.dbentity.identity.User2FA;
+import com.learning.enums.OAuth2ProviderEnum;
 import com.learning.enums.TwoFAMethodEnum;
 import com.learning.health.SecurityMetricsService;
 import com.learning.repository.identity.RoleRepository;
@@ -97,7 +98,7 @@ public class AuthServiceImpl implements AuthService {
                         tempToken, user.getId(), null);
             } else {
                 // No 2FA required, proceed with normal login
-                JwtResponse jwtResponse = generateJwtResponse(authentication, userPrincipal);
+                JwtResponse jwtResponse = generateJwtResponse(userPrincipal);
                 success = true;
                 return jwtResponse;
             }
@@ -137,7 +138,7 @@ public class AuthServiceImpl implements AuthService {
             }
             UserPrincipal userPrincipal = UserPrincipal.build(user);
             Authentication authentication = new UsernamePasswordAuthenticationToken(user.getUserName(), null, userPrincipal.getAuthorities());
-            JwtResponse jwtResponse = generateJwtResponse(authentication, userPrincipal);
+            JwtResponse jwtResponse = generateJwtResponse(userPrincipal);
             success = true;
             return jwtResponse;
         }finally {
@@ -146,7 +147,7 @@ public class AuthServiceImpl implements AuthService {
         }
     }
 
-    private JwtResponse generateJwtResponse(Authentication authentication, UserPrincipal userPrincipal){
+    private JwtResponse generateJwtResponse( UserPrincipal userPrincipal){
         RefreshToken refreshToken = refreshTokenService.createRefreshToken(userPrincipal.getId());
         Set<String> roles = userPrincipal.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
@@ -266,5 +267,16 @@ public class AuthServiceImpl implements AuthService {
             });
         }
         return roles;
+    }
+
+    /**
+     * Set password for social login user
+     */
+    @Override
+    public String setPassword(Long userId, String newPassword) {
+        User user = userRepository.findById(userId).orElseThrow(() -> new UserNotFoundException(userId));
+        user.setPassword(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+        return "Password set successfully";
     }
 }
