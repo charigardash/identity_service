@@ -1,6 +1,7 @@
 package com.learning.service.identity;
 
 import com.learning.dbentity.identity.User;
+import com.learning.enums.OAuth2ProviderEnum;
 import com.learning.requestDTO.LoginRequest;
 import com.learning.requestDTO.SignupRequest;
 import com.learning.requestDTO.TokenRefreshRequest;
@@ -27,4 +28,13 @@ public interface AuthService {
     void logoutUser(TokenRefreshRequest refreshRequest);
 
     void logoutAllUser(Long userId);
+
+
+    /**
+     * Set password for social login user
+     */
+    @Transactional
+    String setPassword(Long userId, String newPassword);
+
+
 }
