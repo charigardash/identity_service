@@ -27,16 +27,6 @@ A robust, production-ready authentication service featuring advanced security me
 - PostgreSQL 13+
 - Redis (for token storage)
 
-![img.png](img.png)
-
-![img_1.png](img_1.png)
-
-![img_4.png](img_4.png)
-
-![img_3.png](img_3.png)
-
-![img_2.png](img_2.png)
-
 ### Installation
 
 1. **Clone the repository**
