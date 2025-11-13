@@ -65,9 +65,9 @@ public class SecurityConfig {
                                 .requestMatchers("/identity/test/**").permitAll()
                                 .requestMatchers("/actuator/health").permitAll()  // Allow health checks
                                 .requestMatchers("/actuator/info").permitAll()    // Allow info endpoint
-                                .requestMatchers("/v3/api-docs/**",
-                                        "/swagger-ui/**",
-                                        "/swagger-ui.html").permitAll() // Swagger apis
+//                                .requestMatchers("/v3/api-docs/**",
+//                                        "/swagger-ui/**",
+//                                        "/swagger-ui.html").permitAll() // Swagger apis
                                 .requestMatchers("/actuator/metrics").hasRole("ADMIN")     // Secure metrics
                                 .requestMatchers("/actuator/prometheus").hasRole("ADMIN")  // Secure prometheus
                                 .requestMatchers("/identity/health/**").hasRole("ADMIN")        // Secure custom health

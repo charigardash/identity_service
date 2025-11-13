@@ -33,7 +33,6 @@ public class User {
     @Email
     private String email;
 
-    @NotBlank
     @Size(max = 255)
     private String password;
 
@@ -41,7 +40,7 @@ public class User {
 
     private LocalDateTime createdAt;
 
-    @ManyToMany(fetch = FetchType.LAZY)
+    @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
             name = "user_role",
             joinColumns = @JoinColumn(name = "user_id"),
